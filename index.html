@@ -1,326 +1,286 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#4f46e5">
-    
-    <!-- iOS support -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
-    <!-- iOS support  closed -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Badminton Trainer</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-    <style>
-        /* Minimal extra styles for auth UI */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .auth-area {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 6px;
-            font-size: 0.8rem;
-        }
-        .auth-buttons {
-            display: flex;
-            gap: 6px;
-        }
-        .auth-btn {
-            border: none;
-            border-radius: 999px;
-            padding: 6px 12px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            background: #111827;
-            color: #e5e7eb;
-        }
-        .auth-btn.secondary {
-            background: #1f2937;
-        }
-        .auth-status {
-            color: #9ca3af;
-        }
-        .cloud-indicator {
-            font-size: 0.75rem;
-            color: #a5b4fc;
-        }
-
-        /* Simple email modal */
-        .modal-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.7);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-        }
-        .modal {
-            background: #020617;
-            border-radius: 16px;
-            padding: 20px;
-            width: 100%;
-            max-width: 360px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            border: 1px solid #1f2937;
-        }
-        .modal h3 {
-            margin: 0 0 8px;
-            font-size: 1rem;
-        }
-        .modal p {
-            margin: 0 0 12px;
-            font-size: 0.8rem;
-            color: #9ca3af;
-        }
-        .modal label {
-            display: block;
-            font-size: 0.75rem;
-            margin-bottom: 4px;
-        }
-        .modal input {
-            width: 100%;
-            padding: 6px 8px;
-            border-radius: 8px;
-            border: 1px solid #374151;
-            background: #020617;
-            color: #e5e7eb;
-            font-size: 0.8rem;
-            margin-bottom: 8px;
-        }
-        .modal-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-        }
-        .modal-btn {
-            border: none;
-            border-radius: 999px;
-            padding: 6px 12px;
-            font-size: 0.75rem;
-            cursor: pointer;
-        }
-        .modal-btn.primary {
-            background: #4f46e5;
-            color: #e5e7eb;
-        }
-        .modal-btn.ghost {
-            background: transparent;
-            color: #9ca3af;
-        }
-        .modal-error {
-            font-size: 0.75rem;
-            color: #fb7185;
-            min-height: 1em;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Badmintion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#020617" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  />
 </head>
 <body>
-    <div class="app-shell">
-        <aside class="sidebar">
-            <div class="logo">
-                <span class="shuttle">🏸</span>
-                <div class="logo-text">
-                    <h1>Badmintion</h1>
-                    <p>Train. Track. Level up.</p>
-                </div>
-            </div>
-
-            <nav class="nav">
-                <button class="nav-item active">
-                    <i class="fa-solid fa-gauge-high"></i>
-                    <span>Dashboard</span>
-                </button>
-                <button class="nav-item">
-                    <i class="fa-solid fa-dumbbell"></i>
-                    <span>Off-court</span>
-                </button>
-                <button class="nav-item">
-                    <i class="fa-solid fa-table-tennis-paddle-ball"></i>
-                    <span>On-court</span>
-                </button>
-            </nav>
-
-            <div class="quote-card">
-                <p class="quote-text">“Consistency beats intensity.”</p>
-                <p class="quote-sub">One good session at a time.</p>
-            </div>
-        </aside>
-
-        <main class="main">
-            <header class="top-bar">
-                <div>
-                    <h2>Today’s Focus</h2>
-                    <p class="subtitle" id="todayFocusText">
-                        Footwork + Net control
-                    </p>
-                </div>
-
-                <div class="auth-area">
-                    <div class="auth-status" id="authStatus">Not signed in</div>
-                    <div class="cloud-indicator" id="cloudStatus">Cloud: idle</div>
-                    <div class="auth-buttons" id="authButtons">
-                        <button class="auth-btn" id="btnGoogle">
-                            <i class="fa-brands fa-google"></i> Continue with Google
-                        </button>
-                        <button class="auth-btn secondary" id="btnEmail">
-                            <i class="fa-regular fa-envelope"></i> Continue with Email
-                        </button>
-                    </div>
-                    <button class="auth-btn secondary" id="btnLogout" style="display:none;">
-                        <i class="fa-solid fa-right-from-bracket"></i> Sign out
-                    </button>
-                </div>
-            </header>
-
-            <section class="grid">
-                <!-- STATS CARDS -->
-                <div class="card stats-card">
-                    <div class="card-header">
-                        <h3>This week</h3>
-                        <span class="chip chip-green">Goal: 5 sessions</span>
-                    </div>
-                    <div class="stats-row">
-                        <div class="stat">
-                            <p class="stat-label">Sessions</p>
-                            <p class="stat-value" id="statSessions">0</p>
-                        </div>
-                        <div class="stat">
-                            <p class="stat-label">Minutes</p>
-                            <p class="stat-value" id="statMinutes">0</p>
-                        </div>
-                        <div class="stat">
-                            <p class="stat-label">Intensity</p>
-                            <p class="stat-value" id="statIntensity">0</p>
-                        </div>
-                    </div>
-                    <div class="progress-wrapper">
-                        <div class="progress-label">
-                            <span>Weekly progress</span>
-                            <span id="progressText">0 / 5</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressFill"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SESSION LOG FORM -->
-                <div class="card form-card">
-                    <div class="card-header">
-                        <h3>Log a session</h3>
-                        <span class="chip chip-blue">+1 rep to future you</span>
-                    </div>
-
-                    <form id="sessionForm">
-                        <div class="form-row">
-                            <label>Type</label>
-                            <div class="pill-row">
-                                <button type="button" class="pill active" data-type="On-court">On-court</button>
-                                <button type="button" class="pill" data-type="Off-court">Off-court</button>
-                            </div>
-                            <input type="hidden" id="sessionType" value="On-court">
-                        </div>
-
-                        <div class="form-row">
-                            <label for="focus">Focus</label>
-                            <input id="focus" type="text" placeholder="e.g. Smashes, defence, footwork ladder">
-                        </div>
-
-                        <div class="form-row two-col">
-                            <div>
-                                <label for="minutes">Minutes</label>
-                                <input id="minutes" type="number" min="5" max="240" placeholder="60">
-                            </div>
-                            <div>
-                                <label for="intensity">Intensity</label>
-                                <select id="intensity">
-                                    <option value="1">Light</option>
-                                    <option value="2">Medium</option>
-                                    <option value="3">Hard</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="primary-btn">
-                            <i class="fa-solid fa-plus"></i>
-                            Add session
-                        </button>
-                        <p class="form-note" id="formMessage"></p>
-                    </form>
-                </div>
-
-                <!-- SESSION LIST -->
-                <div class="card list-card">
-                    <div class="card-header">
-                        <h3>Recent sessions</h3>
-                        <span class="chip chip-soft" id="sessionCountChip">0 logged</span>
-                    </div>
-                    <div class="list" id="sessionList">
-                        <p class="empty-state">No sessions yet. First one sets the tone.</p>
-                    </div>
-                </div>
-
-                <!-- MINI GOALS -->
-                <div class="card goals-card">
-                    <div class="card-header">
-                        <h3>Mini goals</h3>
-                    </div>
-                    <ul class="goals-list">
-                        <li>
-                            <span class="goal-text">3× footwork sessions this week</span>
-                            <span class="goal-tag">Movement</span>
-                        </li>
-                        <li>
-                            <span class="goal-text">2× off-court strength sessions</span>
-                            <span class="goal-tag">Strength</span>
-                        </li>
-                        <li>
-                            <span class="goal-text">1× match with notes after</span>
-                            <span class="goal-tag">Tactical</span>
-                        </li>
-                    </ul>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Email login modal -->
-    <div class="modal-backdrop" id="emailModal">
-        <div class="modal">
-            <h3>Email login</h3>
-            <p>Use the same email each time to keep your sessions together.</p>
-            <form id="emailForm">
-                <label for="emailInput">Email</label>
-                <input id="emailInput" type="email" required placeholder="you@example.com">
-                <label for="passwordInput">Password</label>
-                <input id="passwordInput" type="password" required placeholder="Minimum 6 characters">
-                <div class="modal-error" id="emailError"></div>
-                <div class="modal-actions">
-                    <button type="button" class="modal-btn ghost" id="emailModalClose">Cancel</button>
-                    <button type="submit" class="modal-btn primary">Continue</button>
-                </div>
-            </form>
+  <div class="app">
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-icon">🏸</span>
+        <div>
+          <h1 class="app-title">Badmintion</h1>
+          <p class="app-subtitle">Train. Track. Level up.</p>
         </div>
-    </div>
+      </div>
+      <div class="topbar-right">
+        <span id="streakLabel" class="chip chip-soft">Streak: 0 days</span>
+      </div>
+    </header>
 
-    <script type="module" src="script.js"></script>
-    <script>
+    <!-- MAIN VIEWS -->
+    <main class="views">
+      <!-- HOME -->
+      <section class="view view-active" id="view-home">
+        <h2 class="view-title">Today</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Today’s focus</h3>
+          </div>
+          <p id="todayFocusText" class="subtitle">
+            Footwork + Net control
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>This week</h3>
+            <span class="chip chip-green" id="weeklyGoalLabel">
+              Goal: 5 sessions
+            </span>
+          </div>
+          <div class="stats-row">
+            <div class="stat">
+              <p class="stat-label">Sessions</p>
+              <p class="stat-value" id="statSessions">0</p>
+            </div>
+            <div class="stat">
+              <p class="stat-label">Minutes</p>
+              <p class="stat-value" id="statMinutes">0</p>
+            </div>
+            <div class="stat">
+              <p class="stat-label">Intensity</p>
+              <p class="stat-value" id="statIntensity">0</p>
+            </div>
+          </div>
+          <div class="progress-wrapper">
+            <div class="progress-label">
+              <span>Weekly progress</span>
+              <span id="progressText">0 / 5</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Continue your plan</h3>
+          </div>
+          <div id="homePlanPreview" class="plan-preview-empty">
+            No active plan yet. Create one in Plans.
+          </div>
+        </div>
+
+        <button id="btnQuickLog" class="primary-btn full-width">
+          <i class="fa-solid fa-plus"></i> Quick log session
+        </button>
+      </section>
+
+      <!-- PLANS -->
+      <section class="view" id="view-plans">
+        <div class="view-header-row">
+          <h2 class="view-title">Workout plans</h2>
+          <button id="btnNewPlan" class="pill-btn">
+            <i class="fa-solid fa-plus"></i> New plan
+          </button>
+        </div>
+
+        <div id="plansList" class="list">
+          <p class="empty-state">No plans yet. Create your first one.</p>
+        </div>
+      </section>
+
+      <!-- SESSIONS -->
+      <section class="view" id="view-sessions">
+        <div class="view-header-row">
+          <h2 class="view-title">Sessions</h2>
+          <div class="pill-row small">
+            <button class="pill pill-small pill-active" data-filter="all">
+              All
+            </button>
+            <button class="pill pill-small" data-filter="On-court">
+              On-court
+            </button>
+            <button class="pill pill-small" data-filter="Off-court">
+              Off-court
+            </button>
+          </div>
+        </div>
+
+        <div id="sessionList" class="list">
+          <p class="empty-state">No sessions yet. Log your first one.</p>
+        </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="view" id="view-stats">
+        <h2 class="view-title">Stats</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Weekly completion</h3>
+          </div>
+          <p class="subtitle" id="weeklyCompletionText">
+            No data yet. Complete a plan week to see trends.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Category breakdown</h3>
+          </div>
+          <div id="categoryBreakdown" class="tag-row">
+            <span class="tag-soft">No data yet</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section class="view" id="view-profile">
+        <h2 class="view-title">Profile</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Account</h3>
+          </div>
+          <p class="subtitle" id="authStatus">Not signed in</p>
+          <div class="btn-row">
+            <button id="btnGoogle" class="secondary-btn">
+              <i class="fa-brands fa-google"></i> Continue with Google
+            </button>
+            <button id="btnLogout" class="secondary-btn" style="display:none;">
+              <i class="fa-solid fa-right-from-bracket"></i> Sign out
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Cloud & app</h3>
+          </div>
+          <p class="subtitle" id="cloudStatus">Cloud: idle</p>
+          <p class="subtitle">
+            Add this site to your home screen to use it like an app.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <button class="nav-btn nav-active" data-target="home">
+        <i class="fa-solid fa-house"></i>
+        <span>Home</span>
+      </button>
+      <button class="nav-btn" data-target="plans">
+        <i class="fa-solid fa-list-check"></i>
+        <span>Plans</span>
+      </button>
+      <button class="nav-btn" data-target="sessions">
+        <i class="fa-solid fa-table-tennis-paddle-ball"></i>
+        <span>Sessions</span>
+      </button>
+      <button class="nav-btn" data-target="stats">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Stats</span>
+      </button>
+      <button class="nav-btn" data-target="profile">
+        <i class="fa-solid fa-user"></i>
+        <span>Profile</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- SESSION MODAL -->
+  <div class="modal-backdrop" id="sessionModal">
+    <div class="modal">
+      <h3>Log a session</h3>
+      <p class="modal-sub">One rep for future you.</p>
+
+      <label>Type</label>
+      <div class="pill-row small">
+        <button class="pill pill-small pill-active" data-type="On-court">
+          On-court
+        </button>
+        <button class="pill pill-small" data-type="Off-court">
+          Off-court
+        </button>
+      </div>
+
+      <label for="sessionFocus">Focus</label>
+      <input id="sessionFocus" type="text" placeholder="e.g. Smashes, defence" />
+
+      <div class="two-col">
+        <div>
+          <label for="sessionMinutes">Minutes</label>
+          <input id="sessionMinutes" type="number" min="5" max="240" placeholder="60" />
+        </div>
+        <div>
+          <label for="sessionIntensity">Intensity</label>
+          <select id="sessionIntensity">
+            <option value="1">Light</option>
+            <option value="2">Medium</option>
+            <option value="3">Hard</option>
+          </select>
+        </div>
+      </div>
+
+      <p id="sessionModalError" class="modal-error"></p>
+
+      <div class="modal-actions">
+        <button id="sessionModalCancel" class="modal-btn ghost">Cancel</button>
+        <button id="sessionModalSave" class="modal-btn primary">
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAN MODAL -->
+  <div class="modal-backdrop" id="planModal">
+    <div class="modal">
+      <h3>New workout plan</h3>
+      <p class="modal-sub">Define your weekly structure.</p>
+
+      <label for="planName">Plan name</label>
+      <input id="planName" type="text" placeholder="e.g. Weekly Footwork" />
+
+      <label for="planItems">Items (one per line)</label>
+      <textarea
+        id="planItems"
+        rows="5"
+        placeholder="e.g.&#10;Ladder drills&#10;Shadow movement&#10;Net kills"
+      ></textarea>
+
+      <p id="planModalError" class="modal-error"></p>
+
+      <div class="modal-actions">
+        <button id="planModalCancel" class="modal-btn ghost">Cancel</button>
+        <button id="planModalSave" class="modal-btn primary">
+          Save plan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("service-worker.js");
     }
-    </script>
-
+  </script>
 </body>
 </html>
