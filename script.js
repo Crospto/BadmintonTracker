@@ -1,371 +1,534 @@
-// --- Firebase imports (CDN, modular v9+ style) ---
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import {
-    getAuth,
-    GoogleAuthProvider,
-    signInWithPopup,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    onAuthStateChanged,
-    signOut
-} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import {
-    getFirestore,
-    collection,
-    addDoc,
-    getDocs,
-    query,
-    orderBy
-} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+// Simple local state (swap to Firebase later)
+const STORAGE_KEY = "badmintion-state-v1";
 
-// --- Your Firebase config (from console) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyDsz9V6KSClWXphdQYs4SJJqaOpl2C7wm8",
-  authDomain: "badmintontracka.firebaseapp.com",
-  projectId: "badmintontracka",
-  storageBucket: "badmintontracka.firebasestorage.app",
-  messagingSenderId: "774031069419",
-  appId: "1:774031069419:web:76530d3409a672aebeae",
-  measurementId: "G-HXH8FRYZER"
+let state = {
+  sessions: [],
+  plans: [],
+  activePlanId: null,
+  weeklyGoal: 5,
+  streakDays: 0,
+  lastSessionDate: null,
+  weekId: null, // e.g. "2025-01-06"
+  weeklyCompletionHistory: [] // { weekId, completionPercent }
 };
 
-// --- Initialize Firebase ---
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      state = { ...state, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.warn("Failed to load state", e);
+  }
+}
 
-// --- In-memory session store + constants ---
-const sessions = [];
-const WEEKLY_GOAL = 5;
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
 
-// --- DOM references (existing UI) ---
-const statSessions = document.getElementById("statSessions");
-const statMinutes = document.getElementById("statMinutes");
-const statIntensity = document.getElementById("statIntensity");
-const progressFill = document.getElementById("progressFill");
-const progressText = document.getElementById("progressText");
-const sessionList = document.getElementById("sessionList");
-const sessionCountChip = document.getElementById("sessionCountChip");
-const formMessage = document.getElementById("formMessage");
-const todayFocusText = document.getElementById("todayFocusText");
+// Week helpers
+function getCurrentWeekId() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const diff = now.getDate() - day + (day === 0 ? 0 : 0); // start Sunday
+  const weekStart = new Date(now.setDate(diff));
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart.toISOString().slice(0, 10);
+}
 
-// --- Auth UI elements ---
-const authStatus = document.getElementById("authStatus");
-const cloudStatus = document.getElementById("cloudStatus");
-const btnGoogle = document.getElementById("btnGoogle");
-const btnEmail = document.getElementById("btnEmail");
-const btnLogout = document.getElementById("btnLogout");
+function ensureWeek() {
+  const currentWeekId = getCurrentWeekId();
+  if (!state.weekId) {
+    state.weekId = currentWeekId;
+    saveState();
+    return;
+  }
+  if (state.weekId !== currentWeekId) {
+    // Week changed → archive completion and reset plan checkboxes
+    archiveWeeklyCompletion();
+    resetPlanCompletion();
+    state.weekId = currentWeekId;
+    saveState();
+    renderAll();
+  }
+}
 
-// Email modal elements
-const emailModal = document.getElementById("emailModal");
-const emailForm = document.getElementById("emailForm");
-const emailInput = document.getElementById("emailInput");
-const passwordInput = document.getElementById("passwordInput");
-const emailError = document.getElementById("emailError");
-const emailModalClose = document.getElementById("emailModalClose");
+function archiveWeeklyCompletion() {
+  const activePlan = state.plans.find(p => p.id === state.activePlanId);
+  if (!activePlan) return;
+  const total = activePlan.items.length || 1;
+  const done = activePlan.items.filter(i => i.done).length;
+  const percent = Math.round((done / total) * 100);
+  state.weeklyCompletionHistory.push({
+    weekId: state.weekId,
+    completionPercent: percent
+  });
+}
 
-// --- Auth state ---
-let currentUser = null;
+function resetPlanCompletion() {
+  state.plans = state.plans.map(plan => ({
+    ...plan,
+    items: plan.items.map(item => ({ ...item, done: false }))
+  }));
+}
 
-// --- PILL TOGGLE (On-court / Off-court) ---
-const pillButtons = document.querySelectorAll(".pill-row .pill");
-const sessionTypeInput = document.getElementById("sessionType");
+// DOM refs
+const views = {
+  home: document.getElementById("view-home"),
+  plans: document.getElementById("view-plans"),
+  sessions: document.getElementById("view-sessions"),
+  stats: document.getElementById("view-stats"),
+  profile: document.getElementById("view-profile")
+};
 
-pillButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-        pillButtons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        sessionTypeInput.value = btn.dataset.type;
+const navButtons = document.querySelectorAll(".nav-btn");
+
+const statSessionsEl = document.getElementById("statSessions");
+const statMinutesEl = document.getElementById("statMinutes");
+const statIntensityEl = document.getElementById("statIntensity");
+const progressTextEl = document.getElementById("progressText");
+const progressFillEl = document.getElementById("progressFill");
+const weeklyGoalLabelEl = document.getElementById("weeklyGoalLabel");
+const homePlanPreviewEl = document.getElementById("homePlanPreview");
+const plansListEl = document.getElementById("plansList");
+const sessionListEl = document.getElementById("sessionList");
+const weeklyCompletionTextEl = document.getElementById("weeklyCompletionText");
+const categoryBreakdownEl = document.getElementById("categoryBreakdown");
+const streakLabelEl = document.getElementById("streakLabel");
+
+// Modals
+const sessionModalEl = document.getElementById("sessionModal");
+const sessionModalErrorEl = document.getElementById("sessionModalError");
+const sessionFocusInput = document.getElementById("sessionFocus");
+const sessionMinutesInput = document.getElementById("sessionMinutes");
+const sessionIntensitySelect = document.getElementById("sessionIntensity");
+let sessionModalType = "On-court";
+
+const planModalEl = document.getElementById("planModal");
+const planModalErrorEl = document.getElementById("planModalError");
+const planNameInput = document.getElementById("planName");
+const planItemsInput = document.getElementById("planItems");
+
+// INIT
+
+loadState();
+ensureWeek();
+renderAll();
+attachEvents();
+
+// NAV
+
+function switchView(target) {
+  Object.values(views).forEach(v => v.classList.remove("view-active"));
+  views[target].classList.add("view-active");
+
+  navButtons.forEach(btn => {
+    btn.classList.toggle("nav-active", btn.dataset.target === target);
+  });
+}
+
+// RENDER
+
+function renderAll() {
+  renderHome();
+  renderPlans();
+  renderSessions();
+  renderStats();
+  renderStreak();
+}
+
+function renderHome() {
+  const sessionsThisWeek = state.sessions.filter(s => s.weekId === state.weekId);
+  const totalSessions = sessionsThisWeek.length;
+  const totalMinutes = sessionsThisWeek.reduce((sum, s) => sum + s.minutes, 0);
+  const avgIntensity =
+    totalSessions === 0
+      ? 0
+      : (
+          sessionsThisWeek.reduce((sum, s) => sum + s.intensity, 0) /
+          totalSessions
+        ).toFixed(1);
+
+  statSessionsEl.textContent = totalSessions;
+  statMinutesEl.textContent = totalMinutes;
+  statIntensityEl.textContent = avgIntensity;
+
+  weeklyGoalLabelEl.textContent = `Goal: ${state.weeklyGoal} sessions`;
+  progressTextEl.textContent = `${totalSessions} / ${state.weeklyGoal}`;
+  const pct = Math.min(100, (totalSessions / state.weeklyGoal) * 100);
+  progressFillEl.style.width = `${pct}%`;
+
+  const activePlan = state.plans.find(p => p.id === state.activePlanId);
+  if (!activePlan) {
+    homePlanPreviewEl.className = "plan-preview-empty";
+    homePlanPreviewEl.textContent =
+      "No active plan yet. Create one in Plans.";
+    return;
+  }
+
+  homePlanPreviewEl.className = "plan-preview-list";
+  homePlanPreviewEl.innerHTML = "";
+  activePlan.items.slice(0, 3).forEach(item => {
+    const row = document.createElement("div");
+    row.className = "plan-preview-item";
+    const icon = item.done ? "fa-check-circle" : "fa-circle";
+    row.innerHTML = `<i class="fa-regular ${icon}"></i><span>${item.label}</span>`;
+    homePlanPreviewEl.appendChild(row);
+  });
+  if (activePlan.items.length > 3) {
+    const more = document.createElement("span");
+    more.className = "tag-muted";
+    more.textContent = `+${activePlan.items.length - 3} more`;
+    homePlanPreviewEl.appendChild(more);
+  }
+}
+
+function renderPlans() {
+  plansListEl.innerHTML = "";
+  if (state.plans.length === 0) {
+    plansListEl.innerHTML =
+      '<p class="empty-state">No plans yet. Create your first one.</p>';
+    return;
+  }
+
+  state.plans.forEach(plan => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "list-item";
+
+    const header = document.createElement("div");
+    header.className = "list-item-header";
+
+    const title = document.createElement("h4");
+    title.className = "list-item-title";
+    title.textContent = plan.name;
+
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.alignItems = "center";
+    right.style.gap = "6px";
+
+    const completion =
+      plan.items.length === 0
+        ? 0
+        : Math.round(
+            (plan.items.filter(i => i.done).length / plan.items.length) * 100
+          );
+
+    const chip = document.createElement("span");
+    chip.className = "chip chip-soft";
+    chip.textContent = `${completion}%`;
+
+    const activeBtn = document.createElement("button");
+    activeBtn.className = "pill pill-small";
+    activeBtn.textContent =
+      state.activePlanId === plan.id ? "Active" : "Set active";
+    if (state.activePlanId === plan.id) {
+      activeBtn.classList.add("pill-active");
+    }
+    activeBtn.addEventListener("click", () => {
+      state.activePlanId = plan.id;
+      saveState();
+      renderAll();
     });
-});
 
-// --- FORM SUBMIT ---
-const form = document.getElementById("sessionForm");
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    formMessage.textContent = "";
+    right.appendChild(chip);
+    right.appendChild(activeBtn);
 
-    const type = sessionTypeInput.value;
-    const focus = document.getElementById("focus").value.trim();
-    const minutesValue = document.getElementById("minutes").value;
-    const intensityValue = document.getElementById("intensity").value;
+    header.appendChild(title);
+    header.appendChild(right);
 
-    const minutes = Number(minutesValue);
-    const intensity = Number(intensityValue);
+    const sub = document.createElement("p");
+    sub.className = "list-item-sub";
+    sub.textContent = `${plan.items.length} items`;
 
-    if (!focus) {
-        formMessage.textContent = "Add a focus so you know what you trained.";
-        formMessage.style.color = "#fb7185";
-        return;
-    }
+    const itemsContainer = document.createElement("div");
+    itemsContainer.style.marginTop = "6px";
+    itemsContainer.style.display = "flex";
+    itemsContainer.style.flexDirection = "column";
+    itemsContainer.style.gap = "4px";
 
-    if (!minutes || minutes < 5) {
-        formMessage.textContent = "Minutes should be at least 5.";
-        formMessage.style.color = "#fb7185";
-        return;
-    }
+    plan.items.forEach(item => {
+      const row = document.createElement("label");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "6px";
+      row.style.fontSize = "0.8rem";
 
-    const session = {
-        id: Date.now(),
-        type,
-        focus,
-        minutes,
-        intensity,
-        createdAt: new Date().toISOString()
-    };
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.done;
+      checkbox.addEventListener("change", () => {
+        item.done = checkbox.checked;
+        saveState();
+        renderAll();
+      });
 
-    sessions.unshift(session);
-    form.reset();
-    sessionTypeInput.value = "On-court";
-    pillButtons.forEach(b => {
-        b.classList.toggle("active", b.dataset.type === "On-court");
+      const span = document.createElement("span");
+      span.textContent = item.label;
+
+      row.appendChild(checkbox);
+      row.appendChild(span);
+      itemsContainer.appendChild(row);
     });
 
-    formMessage.textContent = "Session logged. Nice.";
-    formMessage.style.color = "#a5b4fc";
+    wrapper.appendChild(header);
+    wrapper.appendChild(sub);
+    wrapper.appendChild(itemsContainer);
 
-    render();
+    plansListEl.appendChild(wrapper);
+  });
+}
 
-    // Save to cloud if logged in
-    if (currentUser) {
-        try {
-            cloudStatus.textContent = "Cloud: saving…";
-            await addDoc(
-                collection(db, "users", currentUser.uid, "sessions"),
-                session
-            );
-            cloudStatus.textContent = "Cloud: saved";
-        } catch (err) {
-            console.error(err);
-            cloudStatus.textContent = "Cloud: error saving";
-        }
-    }
-});
+function renderSessions(filter = "all") {
+  sessionListEl.innerHTML = "";
+  let sessions = state.sessions.slice().sort((a, b) => b.date - a.date);
+  if (filter !== "all") {
+    sessions = sessions.filter(s => s.type === filter);
+  }
 
-// --- RENDER FUNCTIONS ---
+  if (sessions.length === 0) {
+    sessionListEl.innerHTML =
+      '<p class="empty-state">No sessions yet. Log your first one.</p>';
+    return;
+  }
 
-function render() {
-    renderStats();
-    renderSessions();
-    updateTodayFocus();
+  sessions.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+
+    const header = document.createElement("div");
+    header.className = "list-item-header";
+
+    const title = document.createElement("h4");
+    title.className = "list-item-title";
+    title.textContent = `${s.type} • ${s.minutes} min`;
+
+    const tag = document.createElement("span");
+    tag.className = "tag-soft";
+    const date = new Date(s.date);
+    tag.textContent = date.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
+
+    header.appendChild(title);
+    header.appendChild(tag);
+
+    const sub = document.createElement("p");
+    sub.className = "list-item-sub";
+    sub.textContent = `${s.focus || "No focus"} • Intensity ${s.intensity}`;
+
+    item.appendChild(header);
+    item.appendChild(sub);
+
+    sessionListEl.appendChild(item);
+  });
 }
 
 function renderStats() {
-    const totalSessions = sessions.length;
-    const totalMinutes = sessions.reduce((sum, s) => sum + s.minutes, 0);
-    const avgIntensity = totalSessions
-        ? (sessions.reduce((sum, s) => sum + s.intensity, 0) / totalSessions).toFixed(1)
-        : 0;
+  if (state.weeklyCompletionHistory.length === 0) {
+    weeklyCompletionTextEl.textContent =
+      "No data yet. Complete a plan week to see trends.";
+  } else {
+    const last = state.weeklyCompletionHistory.slice(-1)[0];
+    weeklyCompletionTextEl.textContent = `Last week: ${last.completionPercent}% of your plan completed.`;
+  }
 
-    statSessions.textContent = totalSessions;
-    statMinutes.textContent = totalMinutes;
-    statIntensity.textContent = avgIntensity;
+  // Simple category breakdown based on session type
+  categoryBreakdownEl.innerHTML = "";
+  if (state.sessions.length === 0) {
+    categoryBreakdownEl.innerHTML = '<span class="tag-soft">No data yet</span>';
+    return;
+  }
 
-    const progress = Math.min((totalSessions / WEEKLY_GOAL) * 100, 100);
-    progressFill.style.width = `${progress}%`;
-    progressText.textContent = `${Math.min(totalSessions, WEEKLY_GOAL)} / ${WEEKLY_GOAL}`;
+  const counts = { "On-court": 0, "Off-court": 0 };
+  state.sessions.forEach(s => {
+    if (counts[s.type] != null) counts[s.type]++;
+  });
+
+  Object.entries(counts).forEach(([type, count]) => {
+    const span = document.createElement("span");
+    span.className = "tag-soft";
+    span.textContent = `${type}: ${count}`;
+    categoryBreakdownEl.appendChild(span);
+  });
 }
 
-function renderSessions() {
-    sessionList.innerHTML = "";
+function renderStreak() {
+  streakLabelEl.textContent = `Streak: ${state.streakDays} days`;
+}
 
-    if (!sessions.length) {
-        const p = document.createElement("p");
-        p.className = "empty-state";
-        p.textContent = "No sessions yet. First one sets the tone.";
-        sessionList.appendChild(p);
-        sessionCountChip.textContent = "0 logged";
-        return;
-    }
+// EVENTS
 
-    sessions.forEach((s) => {
-        const item = document.createElement("div");
-        item.className = "session-item";
+function attachEvents() {
+  navButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchView(btn.dataset.target);
+    });
+  });
 
-        const left = document.createElement("div");
-        left.className = "session-main";
+  // Quick log
+  document.getElementById("btnQuickLog").addEventListener("click", () => {
+    openSessionModal();
+  });
 
-        const typeBadge = document.createElement("span");
-        typeBadge.className = "session-type" + (s.type === "Off-court" ? " off" : "");
-        typeBadge.innerHTML = `<i class="fa-solid ${s.type === "Off-court" ? "fa-dumbbell" : "fa-table-tennis-paddle-ball"}"></i> ${s.type}`;
-
-        const focus = document.createElement("span");
-        focus.className = "session-focus";
-        focus.textContent = s.focus;
-
-        const meta = document.createElement("span");
-        meta.className = "session-meta";
-        meta.textContent = `${s.minutes} min • Intensity ${s.intensity}`;
-
-        left.appendChild(typeBadge);
-        left.appendChild(focus);
-        left.appendChild(meta);
-
-        const right = document.createElement("div");
-        right.className = "session-right";
-        right.textContent = timeAgo(s.createdAt);
-
-        item.appendChild(left);
-        item.appendChild(right);
-
-        sessionList.appendChild(item);
+  // Session modal type pills
+  sessionModalEl
+    .querySelectorAll(".pill[data-type]")
+    .forEach(pill => {
+      pill.addEventListener("click", () => {
+        sessionModalEl
+          .querySelectorAll(".pill[data-type]")
+          .forEach(p => p.classList.remove("pill-active"));
+        pill.classList.add("pill-active");
+        sessionModalType = pill.dataset.type;
+      });
     });
 
-    sessionCountChip.textContent = `${sessions.length} logged`;
+  document
+    .getElementById("sessionModalCancel")
+    .addEventListener("click", closeSessionModal);
+  document
+    .getElementById("sessionModalSave")
+    .addEventListener("click", saveSessionFromModal);
+
+  // Plan modal
+  document.getElementById("btnNewPlan").addEventListener("click", () => {
+    openPlanModal();
+  });
+  document
+    .getElementById("planModalCancel")
+    .addEventListener("click", closePlanModal);
+  document
+    .getElementById("planModalSave")
+    .addEventListener("click", savePlanFromModal);
+
+  // Session filters
+  document
+    .querySelectorAll('[data-filter]')
+    .forEach(btn => {
+      btn.addEventListener("click", () => {
+        document
+          .querySelectorAll('[data-filter]')
+          .forEach(b => b.classList.remove("pill-active"));
+        btn.classList.add("pill-active");
+        renderSessions(btn.dataset.filter);
+      });
+    });
 }
 
-function timeAgo(date) {
-    const d = new Date(date);
-    const diffMs = Date.now() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin} min ago`;
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH} h ago`;
-    const diffD = Math.floor(diffH / 24);
-    return `${diffD} d ago`;
+// SESSION MODAL
+
+function openSessionModal() {
+  sessionModalErrorEl.textContent = "";
+  sessionFocusInput.value = "";
+  sessionMinutesInput.value = "";
+  sessionIntensitySelect.value = "2";
+  sessionModalType = "On-court";
+  sessionModalEl
+    .querySelectorAll(".pill[data-type]")
+    .forEach(p => {
+      p.classList.toggle("pill-active", p.dataset.type === "On-court");
+    });
+  sessionModalEl.style.display = "flex";
 }
 
-function updateTodayFocus() {
-    if (!sessions.length) return;
-
-    const latest = sessions[0];
-    const label =
-        latest.type === "Off-court"
-            ? `Off-court: ${latest.focus}`
-            : `On-court: ${latest.focus}`;
-
-    todayFocusText.textContent = label;
+function closeSessionModal() {
+  sessionModalEl.style.display = "none";
 }
 
-// --- Cloud sync helpers ---
+function saveSessionFromModal() {
+  const focus = sessionFocusInput.value.trim();
+  const minutes = parseInt(sessionMinutesInput.value, 10);
+  const intensity = parseInt(sessionIntensitySelect.value, 10);
 
-async function loadSessionsFromCloud(user) {
-    try {
-        cloudStatus.textContent = "Cloud: loading…";
-        const q = query(
-            collection(db, "users", user.uid, "sessions"),
-            orderBy("createdAt", "desc")
-        );
-        const snap = await getDocs(q);
+  if (!minutes || minutes < 5) {
+    sessionModalErrorEl.textContent = "Enter at least 5 minutes.";
+    return;
+  }
 
-        sessions.length = 0;
-        snap.forEach(doc => {
-            const data = doc.data();
-            sessions.push({
-                id: doc.id,
-                type: data.type,
-                focus: data.focus,
-                minutes: data.minutes,
-                intensity: data.intensity,
-                createdAt: data.createdAt
-            });
-        });
+  const now = new Date();
+  const weekId = getCurrentWeekId();
 
-        render();
-        cloudStatus.textContent = "Cloud: loaded";
-    } catch (err) {
-        console.error(err);
-        cloudStatus.textContent = "Cloud: error loading";
-    }
+  const session = {
+    id: crypto.randomUUID(),
+    type: sessionModalType,
+    focus,
+    minutes,
+    intensity,
+    date: now.getTime(),
+    weekId
+  };
+
+  state.sessions.push(session);
+  updateStreak(now);
+  saveState();
+  ensureWeek();
+  renderAll();
+  closeSessionModal();
 }
 
-function updateAuthUI(user) {
-    if (user) {
-        authStatus.textContent = `Signed in as ${user.email || "player"}`;
-        btnGoogle.style.display = "none";
-        btnEmail.style.display = "none";
-        btnLogout.style.display = "inline-flex";
-    } else {
-        authStatus.textContent = "Not signed in";
-        btnGoogle.style.display = "inline-flex";
-        btnEmail.style.display = "inline-flex";
-        btnLogout.style.display = "none";
-        cloudStatus.textContent = "Cloud: idle";
+function updateStreak(now) {
+  const todayId = new Date(now.toDateString()).getTime();
+  if (!state.lastSessionDate) {
+    state.streakDays = 1;
+  } else {
+    const last = new Date(state.lastSessionDate);
+    const lastId = new Date(last.toDateString()).getTime();
+    const diffDays = (todayId - lastId) / (1000 * 60 * 60 * 24);
+    if (diffDays === 0) {
+      // same day, no change
+    } else if (diffDays === 1) {
+      state.streakDays += 1;
+    } else if (diffDays > 1) {
+      state.streakDays = 1;
     }
+  }
+  state.lastSessionDate = now.getTime();
 }
 
-// --- Auth handlers ---
+// PLAN MODAL
 
-btnGoogle.addEventListener("click", async () => {
-    try {
-        cloudStatus.textContent = "Cloud: signing in…";
-        await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-        console.error(err);
-        cloudStatus.textContent = "Cloud: sign-in error";
-    }
-});
+function openPlanModal() {
+  planModalErrorEl.textContent = "";
+  planNameInput.value = "";
+  planItemsInput.value = "";
+  planModalEl.style.display = "flex";
+}
 
-btnEmail.addEventListener("click", () => {
-    emailError.textContent = "";
-    emailForm.reset();
-    emailModal.style.display = "flex";
-});
+function closePlanModal() {
+  planModalEl.style.display = "none";
+}
 
-emailModalClose.addEventListener("click", () => {
-    emailModal.style.display = "none";
-});
+function savePlanFromModal() {
+  const name = planNameInput.value.trim();
+  const lines = planItemsInput.value
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
 
-emailForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    emailError.textContent = "";
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
+  if (!name) {
+    planModalErrorEl.textContent = "Give your plan a name.";
+    return;
+  }
+  if (lines.length === 0) {
+    planModalErrorEl.textContent = "Add at least one item.";
+    return;
+  }
 
-    if (!email || !password) {
-        emailError.textContent = "Email and password required.";
-        return;
-    }
+  const plan = {
+    id: crypto.randomUUID(),
+    name,
+    items: lines.map(label => ({ id: crypto.randomUUID(), label, done: false }))
+  };
 
-    try {
-        cloudStatus.textContent = "Cloud: signing in…";
-        // Try login first
-        await signInWithEmailAndPassword(auth, email, password);
-        emailModal.style.display = "none";
-    } catch (err) {
-        if (err.code === "auth/user-not-found") {
-            // Create account
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                emailModal.style.display = "none";
-            } catch (err2) {
-                console.error(err2);
-                emailError.textContent = "Could not create account.";
-                cloudStatus.textContent = "Cloud: sign-up error";
-            }
-        } else {
-            console.error(err);
-            emailError.textContent = "Login failed. Check details.";
-            cloudStatus.textContent = "Cloud: sign-in error";
-        }
-    }
-});
-
-btnLogout.addEventListener("click", async () => {
-    try {
-        cloudStatus.textContent = "Cloud: signing out…";
-        await signOut(auth);
-    } catch (err) {
-        console.error(err);
-        cloudStatus.textContent = "Cloud: sign-out error";
-    }
-});
-
-// --- Auth state listener ---
-
-onAuthStateChanged(auth, async (user) => {
-    currentUser = user || null;
-    updateAuthUI(currentUser);
-
-    if (currentUser) {
-        await loadSessionsFromCloud(currentUser);
-    } else {
-        // Keep local sessions, but cloud is idle
-        render();
-    }
-});
-
-// --- Initial render ---
-render();
+  state.plans.push(plan);
+  if (!state.activePlanId) {
+    state.activePlanId = plan.id;
+  }
+  saveState();
+  renderAll();
+  closePlanModal();
+}
