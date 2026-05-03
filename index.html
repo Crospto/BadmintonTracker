@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Badminton Trainer</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/a2c1b5f8c3.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="shuttle">🏸</span>
+                <div class="logo-text">
+                    <h1>Badmintion</h1>
+                    <p>Train. Track. Level up.</p>
+                </div>
+            </div>
+
+            <nav class="nav">
+                <button class="nav-item active">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item">
+                    <i class="fa-solid fa-dumbbell"></i>
+                    <span>Off-court</span>
+                </button>
+                <button class="nav-item">
+                    <i class="fa-solid fa-table-tennis-paddle-ball"></i>
+                    <span>On-court</span>
+                </button>
+            </nav>
+
+            <div class="quote-card">
+                <p class="quote-text">“Consistency beats intensity.”</p>
+                <p class="quote-sub">One good session at a time.</p>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="top-bar">
+                <div>
+                    <h2>Today’s Focus</h2>
+                    <p class="subtitle" id="todayFocusText">
+                        Footwork + Net control
+                    </p>
+                </div>
+                <div class="tag-pill">
+                    <span class="dot"></span>
+                    Training day
+                </div>
+            </header>
+
+            <section class="grid">
+                <!-- STATS CARDS -->
+                <div class="card stats-card">
+                    <div class="card-header">
+                        <h3>This week</h3>
+                        <span class="chip chip-green">Goal: 5 sessions</span>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat">
+                            <p class="stat-label">Sessions</p>
+                            <p class="stat-value" id="statSessions">0</p>
+                        </div>
+                        <div class="stat">
+                            <p class="stat-label">Minutes</p>
+                            <p class="stat-value" id="statMinutes">0</p>
+                        </div>
+                        <div class="stat">
+                            <p class="stat-label">Intensity</p>
+                            <p class="stat-value" id="statIntensity">0</p>
+                        </div>
+                    </div>
+                    <div class="progress-wrapper">
+                        <div class="progress-label">
+                            <span>Weekly progress</span>
+                            <span id="progressText">0 / 5</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SESSION LOG FORM -->
+                <div class="card form-card">
+                    <div class="card-header">
+                        <h3>Log a session</h3>
+                        <span class="chip chip-blue">+1 rep to future you</span>
+                    </div>
+
+                    <form id="sessionForm">
+                        <div class="form-row">
+                            <label>Type</label>
+                            <div class="pill-row">
+                                <button type="button" class="pill active" data-type="On-court">On-court</button>
+                                <button type="button" class="pill" data-type="Off-court">Off-court</button>
+                            </div>
+                            <input type="hidden" id="sessionType" value="On-court">
+                        </div>
+
+                        <div class="form-row">
+                            <label for="focus">Focus</label>
+                            <input id="focus" type="text" placeholder="e.g. Smashes, defence, footwork ladder">
+                        </div>
+
+                        <div class="form-row two-col">
+                            <div>
+                                <label for="minutes">Minutes</label>
+                                <input id="minutes" type="number" min="5" max="240" placeholder="60">
+                            </div>
+                            <div>
+                                <label for="intensity">Intensity</label>
+                                <select id="intensity">
+                                    <option value="1">Light</option>
+                                    <option value="2">Medium</option>
+                                    <option value="3">Hard</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="primary-btn">
+                            <i class="fa-solid fa-plus"></i>
+                            Add session
+                        </button>
+                        <p class="form-note" id="formMessage"></p>
+                    </form>
+                </div>
+
+                <!-- SESSION LIST -->
+                <div class="card list-card">
+                    <div class="card-header">
+                        <h3>Recent sessions</h3>
+                        <span class="chip chip-soft" id="sessionCountChip">0 logged</span>
+                    </div>
+                    <div class="list" id="sessionList">
+                        <p class="empty-state">No sessions yet. First one sets the tone.</p>
+                    </div>
+                </div>
+
+                <!-- MINI GOALS -->
+                <div class="card goals-card">
+                    <div class="card-header">
+                        <h3>Mini goals</h3>
+                    </div>
+                    <ul class="goals-list">
+                        <li>
+                            <span class="goal-text">3× footwork sessions this week</span>
+                            <span class="goal-tag">Movement</span>
+                        </li>
+                        <li>
+                            <span class="goal-text">2× off-court strength sessions</span>
+                            <span class="goal-tag">Strength</span>
+                        </li>
+                        <li>
+                            <span class="goal-text">1× match with notes after</span>
+                            <span class="goal-tag">Tactical</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
