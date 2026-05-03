@@ -1,7 +1,45 @@
-// Simple in-memory session store
+// --- Firebase imports (CDN, modular v9+ style) ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    getDocs,
+    query,
+    orderBy
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+// --- Your Firebase config (from console) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDsz9V6KSClWXphdQYs4SJJqaOpl2C7wm8",
+  authDomain: "badmintontracka.firebaseapp.com",
+  projectId: "badmintontracka",
+  storageBucket: "badmintontracka.firebasestorage.app",
+  messagingSenderId: "774031069419",
+  appId: "1:774031069419:web:76530d3409a672aebeae",
+  measurementId: "G-HXH8FRYZER"
+};
+
+// --- Initialize Firebase ---
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+
+// --- In-memory session store + constants ---
 const sessions = [];
 const WEEKLY_GOAL = 5;
 
+// --- DOM references (existing UI) ---
 const statSessions = document.getElementById("statSessions");
 const statMinutes = document.getElementById("statMinutes");
 const statIntensity = document.getElementById("statIntensity");
@@ -12,7 +50,25 @@ const sessionCountChip = document.getElementById("sessionCountChip");
 const formMessage = document.getElementById("formMessage");
 const todayFocusText = document.getElementById("todayFocusText");
 
-// PILL TOGGLE (On-court / Off-court)
+// --- Auth UI elements ---
+const authStatus = document.getElementById("authStatus");
+const cloudStatus = document.getElementById("cloudStatus");
+const btnGoogle = document.getElementById("btnGoogle");
+const btnEmail = document.getElementById("btnEmail");
+const btnLogout = document.getElementById("btnLogout");
+
+// Email modal elements
+const emailModal = document.getElementById("emailModal");
+const emailForm = document.getElementById("emailForm");
+const emailInput = document.getElementById("emailInput");
+const passwordInput = document.getElementById("passwordInput");
+const emailError = document.getElementById("emailError");
+const emailModalClose = document.getElementById("emailModalClose");
+
+// --- Auth state ---
+let currentUser = null;
+
+// --- PILL TOGGLE (On-court / Off-court) ---
 const pillButtons = document.querySelectorAll(".pill-row .pill");
 const sessionTypeInput = document.getElementById("sessionType");
 
@@ -24,9 +80,9 @@ pillButtons.forEach(btn => {
     });
 });
 
-// FORM SUBMIT
+// --- FORM SUBMIT ---
 const form = document.getElementById("sessionForm");
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
     e.preventDefault();
     formMessage.textContent = "";
 
@@ -56,7 +112,7 @@ form.addEventListener("submit", (e) => {
         focus,
         minutes,
         intensity,
-        createdAt: new Date()
+        createdAt: new Date().toISOString()
     };
 
     sessions.unshift(session);
@@ -70,9 +126,24 @@ form.addEventListener("submit", (e) => {
     formMessage.style.color = "#a5b4fc";
 
     render();
+
+    // Save to cloud if logged in
+    if (currentUser) {
+        try {
+            cloudStatus.textContent = "Cloud: saving…";
+            await addDoc(
+                collection(db, "users", currentUser.uid, "sessions"),
+                session
+            );
+            cloudStatus.textContent = "Cloud: saved";
+        } catch (err) {
+            console.error(err);
+            cloudStatus.textContent = "Cloud: error saving";
+        }
+    }
 });
 
-// RENDER FUNCTIONS
+// --- RENDER FUNCTIONS ---
 
 function render() {
     renderStats();
@@ -168,5 +239,133 @@ function updateTodayFocus() {
     todayFocusText.textContent = label;
 }
 
-// Initial render
+// --- Cloud sync helpers ---
+
+async function loadSessionsFromCloud(user) {
+    try {
+        cloudStatus.textContent = "Cloud: loading…";
+        const q = query(
+            collection(db, "users", user.uid, "sessions"),
+            orderBy("createdAt", "desc")
+        );
+        const snap = await getDocs(q);
+
+        sessions.length = 0;
+        snap.forEach(doc => {
+            const data = doc.data();
+            sessions.push({
+                id: doc.id,
+                type: data.type,
+                focus: data.focus,
+                minutes: data.minutes,
+                intensity: data.intensity,
+                createdAt: data.createdAt
+            });
+        });
+
+        render();
+        cloudStatus.textContent = "Cloud: loaded";
+    } catch (err) {
+        console.error(err);
+        cloudStatus.textContent = "Cloud: error loading";
+    }
+}
+
+function updateAuthUI(user) {
+    if (user) {
+        authStatus.textContent = `Signed in as ${user.email || "player"}`;
+        btnGoogle.style.display = "none";
+        btnEmail.style.display = "none";
+        btnLogout.style.display = "inline-flex";
+    } else {
+        authStatus.textContent = "Not signed in";
+        btnGoogle.style.display = "inline-flex";
+        btnEmail.style.display = "inline-flex";
+        btnLogout.style.display = "none";
+        cloudStatus.textContent = "Cloud: idle";
+    }
+}
+
+// --- Auth handlers ---
+
+btnGoogle.addEventListener("click", async () => {
+    try {
+        cloudStatus.textContent = "Cloud: signing in…";
+        await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+        console.error(err);
+        cloudStatus.textContent = "Cloud: sign-in error";
+    }
+});
+
+btnEmail.addEventListener("click", () => {
+    emailError.textContent = "";
+    emailForm.reset();
+    emailModal.style.display = "flex";
+});
+
+emailModalClose.addEventListener("click", () => {
+    emailModal.style.display = "none";
+});
+
+emailForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    emailError.textContent = "";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        emailError.textContent = "Email and password required.";
+        return;
+    }
+
+    try {
+        cloudStatus.textContent = "Cloud: signing in…";
+        // Try login first
+        await signInWithEmailAndPassword(auth, email, password);
+        emailModal.style.display = "none";
+    } catch (err) {
+        if (err.code === "auth/user-not-found") {
+            // Create account
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                emailModal.style.display = "none";
+            } catch (err2) {
+                console.error(err2);
+                emailError.textContent = "Could not create account.";
+                cloudStatus.textContent = "Cloud: sign-up error";
+            }
+        } else {
+            console.error(err);
+            emailError.textContent = "Login failed. Check details.";
+            cloudStatus.textContent = "Cloud: sign-in error";
+        }
+    }
+});
+
+btnLogout.addEventListener("click", async () => {
+    try {
+        cloudStatus.textContent = "Cloud: signing out…";
+        await signOut(auth);
+    } catch (err) {
+        console.error(err);
+        cloudStatus.textContent = "Cloud: sign-out error";
+    }
+});
+
+// --- Auth state listener ---
+
+onAuthStateChanged(auth, async (user) => {
+    currentUser = user || null;
+    updateAuthUI(currentUser);
+
+    if (currentUser) {
+        await loadSessionsFromCloud(currentUser);
+    } else {
+        // Keep local sessions, but cloud is idle
+        render();
+    }
+});
+
+// --- Initial render ---
 render();
