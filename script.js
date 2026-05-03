@@ -1,4 +1,3 @@
-// Simple local state (swap to Firebase later)
 const STORAGE_KEY = "badmintion-state-v1";
 
 let state = {
@@ -8,16 +7,14 @@ let state = {
   weeklyGoal: 5,
   streakDays: 0,
   lastSessionDate: null,
-  weekId: null, // e.g. "2025-01-06"
-  weeklyCompletionHistory: [] // { weekId, completionPercent }
+  weekId: null,
+  weeklyCompletionHistory: []
 };
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      state = { ...state, ...JSON.parse(raw) };
-    }
+    if (raw) state = { ...state, ...JSON.parse(raw) };
   } catch (e) {
     console.warn("Failed to load state", e);
   }
@@ -27,11 +24,10 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-// Week helpers
 function getCurrentWeekId() {
   const now = new Date();
   const day = now.getDay(); // 0=Sun
-  const diff = now.getDate() - day + (day === 0 ? 0 : 0); // start Sunday
+  const diff = now.getDate() - day;
   const weekStart = new Date(now.setDate(diff));
   weekStart.setHours(0, 0, 0, 0);
   return weekStart.toISOString().slice(0, 10);
@@ -45,7 +41,6 @@ function ensureWeek() {
     return;
   }
   if (state.weekId !== currentWeekId) {
-    // Week changed → archive completion and reset plan checkboxes
     archiveWeeklyCompletion();
     resetPlanCompletion();
     state.weekId = currentWeekId;
@@ -111,14 +106,12 @@ const planNameInput = document.getElementById("planName");
 const planItemsInput = document.getElementById("planItems");
 
 // INIT
-
 loadState();
 ensureWeek();
 renderAll();
 attachEvents();
 
 // NAV
-
 function switchView(target) {
   Object.values(views).forEach(v => v.classList.remove("view-active"));
   views[target].classList.add("view-active");
@@ -129,7 +122,6 @@ function switchView(target) {
 }
 
 // RENDER
-
 function renderAll() {
   renderHome();
   renderPlans();
@@ -336,7 +328,6 @@ function renderStats() {
     weeklyCompletionTextEl.textContent = `Last week: ${last.completionPercent}% of your plan completed.`;
   }
 
-  // Simple category breakdown based on session type
   categoryBreakdownEl.innerHTML = "";
   if (state.sessions.length === 0) {
     categoryBreakdownEl.innerHTML = '<span class="tag-soft">No data yet</span>';
@@ -361,7 +352,6 @@ function renderStreak() {
 }
 
 // EVENTS
-
 function attachEvents() {
   navButtons.forEach(btn => {
     btn.addEventListener("click", () => {
@@ -369,12 +359,10 @@ function attachEvents() {
     });
   });
 
-  // Quick log
   document.getElementById("btnQuickLog").addEventListener("click", () => {
     openSessionModal();
   });
 
-  // Session modal type pills
   sessionModalEl
     .querySelectorAll(".pill[data-type]")
     .forEach(pill => {
@@ -394,7 +382,6 @@ function attachEvents() {
     .getElementById("sessionModalSave")
     .addEventListener("click", saveSessionFromModal);
 
-  // Plan modal
   document.getElementById("btnNewPlan").addEventListener("click", () => {
     openPlanModal();
   });
@@ -405,13 +392,12 @@ function attachEvents() {
     .getElementById("planModalSave")
     .addEventListener("click", savePlanFromModal);
 
-  // Session filters
   document
-    .querySelectorAll('[data-filter]')
+    .querySelectorAll("[data-filter]")
     .forEach(btn => {
       btn.addEventListener("click", () => {
         document
-          .querySelectorAll('[data-filter]')
+          .querySelectorAll("[data-filter]")
           .forEach(b => b.classList.remove("pill-active"));
         btn.classList.add("pill-active");
         renderSessions(btn.dataset.filter);
@@ -420,7 +406,6 @@ function attachEvents() {
 }
 
 // SESSION MODAL
-
 function openSessionModal() {
   sessionModalErrorEl.textContent = "";
   sessionFocusInput.value = "";
@@ -453,7 +438,7 @@ function saveSessionFromModal() {
   const weekId = getCurrentWeekId();
 
   const session = {
-    id: crypto.randomUUID(),
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     type: sessionModalType,
     focus,
     minutes,
@@ -479,7 +464,7 @@ function updateStreak(now) {
     const lastId = new Date(last.toDateString()).getTime();
     const diffDays = (todayId - lastId) / (1000 * 60 * 60 * 24);
     if (diffDays === 0) {
-      // same day, no change
+      // same day
     } else if (diffDays === 1) {
       state.streakDays += 1;
     } else if (diffDays > 1) {
@@ -490,7 +475,6 @@ function updateStreak(now) {
 }
 
 // PLAN MODAL
-
 function openPlanModal() {
   planModalErrorEl.textContent = "";
   planNameInput.value = "";
@@ -519,9 +503,13 @@ function savePlanFromModal() {
   }
 
   const plan = {
-    id: crypto.randomUUID(),
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     name,
-    items: lines.map(label => ({ id: crypto.randomUUID(), label, done: false }))
+    items: lines.map(label => ({
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Math.random()),
+      label,
+      done: false
+    }))
   };
 
   state.plans.push(plan);
